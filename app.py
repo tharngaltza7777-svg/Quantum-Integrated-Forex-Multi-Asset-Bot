@@ -8,24 +8,14 @@ from streamlit_autorefresh import st_autorefresh
 from datetime import datetime
 
 # --- CONFIGURATION ---
-TOKEN = "8797384581:AAF0lqlYmLUbexXDyEpEwta1RJ3IsuKAJYI"
-CHAT_ID = "8344079627"
+TOKEN = "8797384581:AAF0lqlYmLUbexXDyEpEwta1RJ3IsuKAJYI" #
+CHAT_ID = "8344079627" #
 TRADE_AED = 500 
 
-# ၂ မိနစ်တစ်ခါ Auto-refresh လုပ်ခြင်း
-st_autorefresh(interval=2 * 60 * 1000, key="quantum_forex_loop")
+st_autorefresh(interval=1 * 60 * 1000, key="quantum_forex_v3") # ၁ မိနစ်တစ်ခါ စစ်မည်
 
 if "history" not in st.session_state:
     st.session_state.history = []
-
-# --- QUANTUM ANALYTICS FUNCTIONS ---
-def quantum_probability_check(rsi, price_series):
-    """Quantum-inspired momentum analysis"""
-    momentum = price_series.diff().iloc[-1]
-    q_score = (rsi / 100)
-    if momentum > 0: q_score += 0.07
-    else: q_score -= 0.07
-    return np.clip(q_score, 0, 1)
 
 def calculate_rsi(series, window=14):
     delta = series.diff()
@@ -36,15 +26,13 @@ def calculate_rsi(series, window=14):
     rs = ema_up / ema_down
     return 100 - (100 / (1 + rs))
 
-st.title("🌌 Quantum Integrated Forex Bot")
-st.markdown(f"**Trade Mode:** 500 AED Fixed Position")
+st.title("🌐 Quantum Forex Master V3")
+st.markdown(f"**Chat ID:** `{CHAT_ID}` | **Trade:** {TRADE_AED} AED") #
 
-# --- ASSET SELECTION ---
 major_pairs = {
     "EUR/USD (Euro)": "EURUSD=X",
     "GBP/USD (Pound)": "GBPUSD=X",
     "USD/JPY (Yen)": "JPY=X",
-    "AUD/USD (Aussie)": "AUDUSD=X",
     "Gold (XAU/USD)": "GC=F",
     "Bitcoin (BTC/USD)": "BTC-USD"
 }
@@ -53,64 +41,51 @@ asset_label = st.selectbox("🎯 Select Asset", list(major_pairs.keys()))
 ticker_symbol = major_pairs[asset_label]
 
 try:
-    data = yf.download(ticker_symbol, period="5d", interval="1m", progress=False)
+    # Data ဆွဲယူခြင်း
+    data = yf.download(ticker_symbol, period="2d", interval="1m", progress=False)
     
-    if not data.empty and len(data) > 30:
+    if not data.empty:
         data['RSI'] = calculate_rsi(data['Close'])
         current_price = float(data['Close'].iloc[-1])
         current_rsi = float(data['RSI'].iloc[-1])
         
-        # Quantum Score Calculation
-        q_prob = quantum_probability_check(current_rsi, data['Close'])
-        
-        # Strategy Logic
+        # --- SIMPLIFIED LOGIC FOR NOTI ---
+        # Noti မြန်မြန်တက်စေရန် RSI Zone ကို 35/65 ပြန်ထားပေးသည်
         action = "WAIT"
-        if current_rsi < 32 and q_prob < 0.45: action = "STRONG BUY"
-        elif current_rsi > 68 and q_prob > 0.55: action = "STRONG SELL"
+        if current_rsi < 35: action = "BUY"
+        elif current_rsi > 65: action = "SELL"
 
-        forecast = "Bullish" if q_prob < 0.5 else "Bearish"
-
-        # --- LIVE DASHBOARD ---
-        st.subheader(f"📊 {asset_label} Live Status")
-        col1, col2, col3 = st.columns(3)
-        
+        # Dashboard
+        c1, c2, c3 = st.columns(3)
         price_format = "{:.5f}" if "USD" in asset_label else "{:.2f}"
-        col1.metric("Live Price", price_format.format(current_price))
-        col2.metric("Quantum Score", f"{q_prob:.2%}")
-        col3.metric("RSI", f"{current_rsi:.2f}")
+        c1.metric("Live Price", price_format.format(current_price))
+        c2.metric("RSI", f"{current_rsi:.2f}")
+        c3.metric("Action", action)
 
-        st.info(f"🔮 **AI Forecast:** {forecast} | **Action:** {action}")
-        
-        # --- TELEGRAM NOTIFICATION ---
+        # --- TELEGRAM SENDING ---
         if action != "WAIT":
-            h_key = f"quantum_{ticker_symbol}"
-            if h_key not in st.session_state or st.session_state[h_key] != action:
+            h_key = f"v3_{ticker_symbol}_{action}"
+            if h_key not in st.session_state:
                 now = datetime.now().strftime("%H:%M:%S")
-                st.session_state.history.append({
-                    "Pair": asset_label, "Time": now, "Action": action, 
-                    "Price": price_format.format(current_price)
-                })
                 
-                async def send_alert():
-                    bot = Bot(token=TOKEN)
-                    msg = (f"🌌 **QUANTUM FOREX ALERT**\n\n"
-                           f"Asset: {asset_label}\n"
-                           f"Action: {action}\n"
-                           f"Price: {price_format.format(current_price)}\n"
-                           f"Trade: {TRADE_AED} AED\n"
-                           f"Quantum Score: {q_prob:.2%}")
-                    await bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode='Markdown')
+                async def send_now():
+                    try:
+                        bot = Bot(token=TOKEN)
+                        msg = (f"🌐 **FOREX SIGNAL**\nAsset: {asset_label}\n"
+                               f"Action: {action}\nPrice: {price_format.format(current_price)}\n"
+                               f"Time: {now}\nTrade: {TRADE_AED} AED")
+                        await bot.send_message(chat_id=CHAT_ID, text=msg)
+                        st.success("✅ Telegram Noti Sent!")
+                    except Exception as e:
+                        st.error(f"❌ Telegram Error: {e}")
 
-                asyncio.run(send_alert())
-                st.session_state[h_key] = action
+                asyncio.run(send_now())
+                st.session_state.history.append({"Pair": asset_label, "Time": now, "Action": action})
+                st.session_state[h_key] = True
 
-        # --- HISTORY ---
-        st.divider()
-        st.subheader("📋 Daily Win/Loss Analysis")
+        # Log Table
         if st.session_state.history:
-            st.table(pd.DataFrame(st.session_state.history).tail(10))
-        else:
-            st.write("ယနေ့အတွက် Signal မှတ်တမ်း မရှိသေးပါ။")
+            st.table(pd.DataFrame(st.session_state.history).tail(5))
 
 except Exception as e:
-    st.warning("ဈေးကွက်ဒေတာများကို Quantum Algorithm ဖြင့် ချိတ်ဆက်နေဆဲဖြစ်ပါသည်။")
+    st.error(f"System Error: {e}")
